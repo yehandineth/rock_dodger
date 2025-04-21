@@ -174,9 +174,8 @@ const int SCREEN_WIDTH = 1080;
 const int BUFFER = 250;
 const int NUM_IMAGES = 5;
 
-const double ROCK_SOFTNESS = 2;//To make the rock hurt less
-
-const int ACCELERATION = 25;//To increase falling rate
+const int FONT_SIZE = 30;       
+const font FONT1 = load_font("font1", "Roboto-italic.ttf");
 
 bitmap IMAGES[NUM_IMAGES];
 
@@ -207,7 +206,6 @@ struct rock_{
     }
     ~rock_()
     {
-        delete this;
     }
     void draw_rock()
     {
@@ -242,7 +240,73 @@ struct player_
     }
     ~player_()
     {
-        delete this;
+    }
+    
+};
+
+struct menu
+{    
+    menu()
+    {
+    }
+
+    ~menu()
+    {
+    }
+    /*
+    Returns whether the mouse is on the button or not
+    */
+    bool mouse_on_button(double y)
+    {
+        return (mouse_x() > (SCREEN_WIDTH/3) && mouse_x() < 2 * (SCREEN_WIDTH/3) && mouse_y() > y && mouse_y() < y+100);
+    }
+
+    /*
+    Draw the buttons in the menu
+    */
+    void draw_button(double y)
+    {
+        color btn_color;
+        if (mouse_on_button(y))
+        {
+            btn_color = color_dim_gray();
+        }
+        else
+        {
+            btn_color = color_dark_gray();
+        }
+        fill_rectangle(btn_color, SCREEN_WIDTH/3, y, SCREEN_WIDTH/3,100);
+    }
+
+
+    /*
+    The menu before start playing
+    */
+    int draw_menu()
+    {
+        while(!quit_requested())
+        {
+            process_events();
+
+            clear_screen(color_white());
+            draw_text("......ROCK DODGER......", color_orange(), FONT1, FONT_SIZE*2, SCREEN_WIDTH/2 -FONT_SIZE*10 ,SCREEN_HEIGHT/3 - 120 );
+
+            for (int i =0; i < 400; i+=120)
+                {
+                    draw_button(SCREEN_HEIGHT/3 + i);
+
+                    if (mouse_on_button(SCREEN_HEIGHT/3 + i) && mouse_clicked(LEFT_BUTTON))
+                    {
+                        return i/120;
+                    }
+                }
+                draw_text("EXIT",color_white(),FONT1, FONT_SIZE,SCREEN_WIDTH/2 -FONT_SIZE*2, SCREEN_HEIGHT/3 + 20);
+                draw_text("EASY", color_white(),FONT1, FONT_SIZE, SCREEN_WIDTH/2  -FONT_SIZE*2, SCREEN_HEIGHT/3 + 140);
+                draw_text("MEDIUM", color_white(),FONT1, FONT_SIZE, SCREEN_WIDTH/2  -FONT_SIZE*2, SCREEN_HEIGHT/3 + 260);
+                draw_text("HARD", color_white(),FONT1, FONT_SIZE, SCREEN_WIDTH/2 -FONT_SIZE*2, SCREEN_HEIGHT/3 + 380);
+            refresh_screen();
+        }
+        return 0;
     }
     
 };
@@ -259,28 +323,38 @@ struct game_state
     long next_rock_time;
     int last_added_rock;
 
-    game_state ()
+    double rock_softness;//To make the rock hurt less
+    double acceleration;//To increase falling rate
+
+    game_state(int _dif)
     {
-        player = (new player_(100));
-        over = false;
+        write_line("Difficulty: " + to_string(_dif));
+        game_clock = create_timer("game_clock");
+        rock_softness = 2 / (_dif+0.001);//To make the rock hurt less
+        acceleration = 0.025 * (_dif+0.001);
+        player = (new player_(30/(_dif+0.001)));
+        over = (_dif == 0);
         score = 0;
 
         rock_history = new dynamic_array<rock_ *>(0);
         rock_queue = new dynamic_array<rock_ *>(0);
 
-        game_clock = create_timer("game_clock");
-
         rock_release = 0;
         next_rock_time = 1000;
 
         load_images();
+        write_line("Loaded images");
     }
-    ~game_state ()
+    ~game_state()
     {
+        for (int i = 0; i < rock_queue->size;    i++) 
+        {
+            delete (rock_queue->data)[i];
+        }
+        
         delete player;
         delete rock_history;
         delete rock_queue;
-        delete this;
     }
 
     void load_images()
@@ -288,6 +362,7 @@ struct game_state
         for (int i=0; i<NUM_IMAGES; i++)
         {
             IMAGES[i] = load_bitmap("Rock_"+to_string(i), "./" + to_string(i) + ".png");
+            write_line("Loaded image: " + to_string(i) + ".png");
         }
     }
 
@@ -331,7 +406,7 @@ struct game_state
                     player->radius)
                 )
                 {
-                    player->health-=rock->velocity[1]/ROCK_SOFTNESS;
+                    player->health-=rock->velocity[1]/rock_softness;
                     rock->hit = true;
                     remove_rock(*rock);
                 }
@@ -354,7 +429,7 @@ struct game_state
         {
             rock_release++;
             reset_timer(game_clock);
-            next_rock_time = rnd(500, 1500)/(1 + (rock_release/ACCELERATION));
+            next_rock_time = rnd(500, 1500)/(1 + (rock_release*acceleration));
         }
         if (player->health <=0)
         {
@@ -396,7 +471,7 @@ struct game_state
     }
     void draw_health()
     {
-        draw_text("Health Remaining : " + to_string((int) player->health), color_black(), 20 ,20 );
+        draw_text("Health Remaining : " + to_string((int) player->health), color_black(), FONT1, FONT_SIZE, 20 ,20 );
     }
 
     void draw_player()
@@ -409,8 +484,10 @@ struct game_state
         start_timer(game_clock);
         while (!quit_requested())
         {   
+            // printf("Game started1\n");
             if (over)
             {
+                write_line("Game Over");
                 return;
             }
             process_events();
@@ -446,8 +523,13 @@ struct game_state
 int main()
 {   
     open_window("Map Editor", SCREEN_WIDTH, SCREEN_HEIGHT);
-    game_state *game = new game_state();
+    menu *game_menu = new menu();
+    game_state *game = new game_state(game_menu->draw_menu());
+    delete game_menu;
+    write_line("Game started");
     game->render_game();
+    write_line("Game ended");
     delete game;
+    write_line("Game deleted");
     return 0;
 }
