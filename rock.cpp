@@ -210,7 +210,7 @@ struct rock_{
     void draw_rock()
     {
         draw_bitmap(*image, x_pos, y_pos, option_scale_bmp(0.1,0.1));
-        track_rock();//For debugging purposes
+        // track_rock();//For debugging purposes
         x_pos+=velocity[0];
         y_pos+=velocity[1];
     }
@@ -242,6 +242,105 @@ struct player_
     {
     }
     
+};
+
+struct stats_page
+{
+    int score;
+    int dodge_accuracy;
+    dynamic_array<rock_ *> *rock_history;
+    stats_page(int _score, dynamic_array<rock_ *> *_rock_history)
+    {
+        score = _score;
+        rock_history = _rock_history;
+    }
+    ~stats_page()
+    {
+    }
+
+    void calc_stats()
+    {
+        double missed = 0;
+        double hit = 0;
+        for (int i = 0; i < rock_history->size; i++)
+        {
+            rock_ *rock = rock_history->data[i];
+            if (rock->missed)
+            {
+                missed++;
+                write_line("Missed Rock: " + to_string(i));
+            }
+            else if (rock->hit)
+            {
+                hit++;
+            }
+            // write_line("Rock " + to_string(i) + " : " + to_string(rock->missed) + " : " + to_string(rock->hit));
+        }
+        // write_line(" Missed: " + to_string(missed) + " Hit: " + to_string(hit));
+
+        if (hit+missed==0)
+        {
+            dodge_accuracy = 0;
+        }
+        else
+        {
+            dodge_accuracy = ((missed/(hit+missed))*100);
+            write_line("Dodge Accuracy: " + to_string(dodge_accuracy) + "%");
+        }
+    }
+
+    bool mouse_on_button(double x)
+    {
+        return (mouse_x() > x && mouse_x() < x+SCREEN_WIDTH/5 && mouse_y() > SCREEN_HEIGHT*5/6 && mouse_y()< SCREEN_HEIGHT*5/6 + 100);
+    }
+
+    /*
+    Draw the buttons in the menu
+    */
+    void draw_button(double x)
+    {
+        color btn_color;
+        if (mouse_on_button(x))
+        {
+            btn_color = color_dim_gray();
+        }
+        else
+        {
+            btn_color = color_dark_gray();
+        }
+        fill_rectangle(btn_color, x, SCREEN_HEIGHT*5/6, SCREEN_WIDTH/5,100);
+    }
+    int draw_stats()
+    {
+        calc_stats();
+        while(!quit_requested())
+        {
+            process_events();
+
+            clear_screen(color_white());
+            draw_text("Game Over", color_black(), FONT1, FONT_SIZE*5, SCREEN_WIDTH/2 -FONT_SIZE*10 ,SCREEN_HEIGHT/3 - 120 );
+            draw_text("Score: " + to_string(score), color_black(), FONT1, FONT_SIZE, SCREEN_WIDTH/2 -FONT_SIZE*10 ,SCREEN_HEIGHT/3  + FONT_SIZE*2 );
+            draw_text("Dodge Accuracy: " + to_string((int)dodge_accuracy) + "%", color_black(), FONT1, FONT_SIZE, SCREEN_WIDTH/2 -FONT_SIZE*10 ,SCREEN_HEIGHT/2);
+            
+
+            
+
+            for (int i =0; i < 2; i++)
+            {
+                draw_button((1+2*i)*SCREEN_WIDTH/5);
+
+                if (mouse_on_button((1+2*i)*SCREEN_WIDTH/5) && mouse_clicked(LEFT_BUTTON))
+                {
+                    return i;
+                }
+            }
+            draw_text("EXIT",color_red(),FONT1, FONT_SIZE,SCREEN_WIDTH/5 +FONT_SIZE*2, SCREEN_HEIGHT*4/6 + 150);
+            draw_text("MENU",color_red(),FONT1, FONT_SIZE,SCREEN_WIDTH*3/5 +FONT_SIZE*2, SCREEN_HEIGHT*4/6 + 150);
+
+            refresh_screen();
+        }
+        return 0;
+    }
 };
 
 struct menu
@@ -292,18 +391,18 @@ struct menu
             draw_text("......ROCK DODGER......", color_orange(), FONT1, FONT_SIZE*2, SCREEN_WIDTH/2 -FONT_SIZE*10 ,SCREEN_HEIGHT/3 - 120 );
 
             for (int i =0; i < 400; i+=120)
-                {
-                    draw_button(SCREEN_HEIGHT/3 + i);
+            {
+                draw_button(SCREEN_HEIGHT/3 + i);
 
-                    if (mouse_on_button(SCREEN_HEIGHT/3 + i) && mouse_clicked(LEFT_BUTTON))
-                    {
-                        return i/120;
-                    }
+                if (mouse_on_button(SCREEN_HEIGHT/3 + i) && mouse_clicked(LEFT_BUTTON))
+                {
+                    return i/120;
                 }
-                draw_text("EXIT",color_white(),FONT1, FONT_SIZE,SCREEN_WIDTH/2 -FONT_SIZE*2, SCREEN_HEIGHT/3 + 20);
-                draw_text("EASY", color_white(),FONT1, FONT_SIZE, SCREEN_WIDTH/2  -FONT_SIZE*2, SCREEN_HEIGHT/3 + 140);
-                draw_text("MEDIUM", color_white(),FONT1, FONT_SIZE, SCREEN_WIDTH/2  -FONT_SIZE*2, SCREEN_HEIGHT/3 + 260);
-                draw_text("HARD", color_white(),FONT1, FONT_SIZE, SCREEN_WIDTH/2 -FONT_SIZE*2, SCREEN_HEIGHT/3 + 380);
+            }
+            draw_text("EXIT",color_white(),FONT1, FONT_SIZE,SCREEN_WIDTH/2 -FONT_SIZE*2, SCREEN_HEIGHT/3 + 20);
+            draw_text("EASY", color_white(),FONT1, FONT_SIZE, SCREEN_WIDTH/2  -FONT_SIZE*2, SCREEN_HEIGHT/3 + 140);
+            draw_text("MEDIUM", color_white(),FONT1, FONT_SIZE, SCREEN_WIDTH/2  -FONT_SIZE*2, SCREEN_HEIGHT/3 + 260);
+            draw_text("HARD", color_white(),FONT1, FONT_SIZE, SCREEN_WIDTH/2 -FONT_SIZE*2, SCREEN_HEIGHT/3 + 380);
             refresh_screen();
         }
         return 0;
@@ -328,7 +427,7 @@ struct game_state
 
     game_state(int _dif)
     {
-        write_line("Difficulty: " + to_string(_dif));
+        // write_line("Difficulty: " + to_string(_dif));
         game_clock = create_timer("game_clock");
         rock_softness = 2 / (_dif+0.001);//To make the rock hurt less
         acceleration = 0.025 * (_dif+0.001);
@@ -343,7 +442,7 @@ struct game_state
         next_rock_time = 1000;
 
         load_images();
-        write_line("Loaded images");
+        // write_line("Loaded images");
     }
     ~game_state()
     {
@@ -362,7 +461,7 @@ struct game_state
         for (int i=0; i<NUM_IMAGES; i++)
         {
             IMAGES[i] = load_bitmap("Rock_"+to_string(i), "./" + to_string(i) + ".png");
-            write_line("Loaded image: " + to_string(i) + ".png");
+            // write_line("Loaded image: " + to_string(i) + ".png");
         }
     }
 
@@ -378,6 +477,8 @@ struct game_state
 
     void remove_rock(rock_ &rock)
     {
+        // write_line("Rock removed: " + to_string(rock.x_pos + bitmap_width(*rock.image)/2));
+        // write_line(rock_history->size);
         rock_history->add(&rock);
         rock.draw = false;
     }
@@ -417,6 +518,7 @@ struct game_state
                     rock->missed = true;
                     // printf("WORKS\n");
                     remove_rock(*rock);
+                    // write_line("Missed Rock: " + to_string(i));
                 }
             } 
             // printf("%d\n", j);
@@ -487,7 +589,6 @@ struct game_state
             // printf("Game started1\n");
             if (over)
             {
-                write_line("Game Over");
                 return;
             }
             process_events();
@@ -520,16 +621,28 @@ struct game_state
     }
 };
 
-int main()
+int main()  
 {   
     open_window("Map Editor", SCREEN_WIDTH, SCREEN_HEIGHT);
-    menu *game_menu = new menu();
-    game_state *game = new game_state(game_menu->draw_menu());
-    delete game_menu;
-    write_line("Game started");
-    game->render_game();
-    write_line("Game ended");
-    delete game;
-    write_line("Game deleted");
+    while (true)
+    {
+        menu *game_menu = new menu();
+        game_state *game = new game_state(game_menu->draw_menu());
+        delete game_menu;
+        write_line("Game started");
+        game->render_game();
+        write_line("Game ended");
+      
+        // game->rock_history->print();
+        stats_page stats = stats_page(game->score, game->rock_history);        
+        int user_opt = stats.draw_stats();
+
+        delete game;
+        write_line("Game deleted");
+        if (user_opt == 0)
+        {
+           break;
+        }
+    } 
     return 0;
 }
