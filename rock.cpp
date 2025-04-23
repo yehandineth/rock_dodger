@@ -179,6 +179,9 @@ const font FONT1 = load_font("font1", "Roboto-italic.ttf");
 
 bitmap IMAGES[NUM_IMAGES];
 
+const long WIND_CHANGE_TIME = 4000; // Every 4 seconds the wind changes direction
+const int MAX_WIND = 5; // Maximum wind speed
+
 //Add all the rock related functions to this struct
 struct rock_{
     double x_pos;
@@ -412,6 +415,7 @@ struct menu
 
 struct game_state
 {
+    int wind;
     player_ *player;
     bool over;
     int score;
@@ -421,6 +425,7 @@ struct game_state
     int rock_release;
     long next_rock_time;
     int last_added_rock;
+    timer wind_clock;
 
     double rock_softness;//To make the rock hurt less
     double acceleration;//To increase falling rate
@@ -429,6 +434,8 @@ struct game_state
     {
         // write_line("Difficulty: " + to_string(_dif));
         game_clock = create_timer("game_clock");
+        wind_clock = create_timer("wind_clock");
+
         rock_softness = 2 / (_dif+0.001);//To make the rock hurt less
         acceleration = 0.025 * (_dif+0.001);
         player = (new player_(30/(_dif+0.001)));
@@ -498,6 +505,7 @@ struct game_state
                 // j++;//Track number of drawn rocks
                 // track_rock(*rock); //Bounding boxes of rocks
                 rock->draw_rock();
+                rock->velocity[0] = wind*0.1;
                 if (circles_intersect(
                     (rock->x_pos + (double) bitmap_width(*rock->image)/2),
                     (rock->y_pos + (double) bitmap_height(*rock->image)/2),
@@ -533,6 +541,19 @@ struct game_state
             reset_timer(game_clock);
             next_rock_time = rnd(500, 1500)/(1 + (rock_release*acceleration));
         }
+        if (timer_ticks(wind_clock)>WIND_CHANGE_TIME)
+        {
+            reset_timer(wind_clock);
+            if (rnd(-1,1)>=0)
+            {   
+                wind = rnd(1,MAX_WIND);
+            }
+            else
+            {
+                wind = -rnd(1,MAX_WIND);
+
+            }
+        } 
         if (player->health <=0)
         {
             //STATS PAGE MENU
@@ -584,6 +605,7 @@ struct game_state
     void render_game()
     {
         start_timer(game_clock);
+        start_timer(wind_clock);
         while (!quit_requested())
         {   
             // printf("Game started1\n");
