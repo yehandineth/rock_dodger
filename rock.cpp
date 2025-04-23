@@ -271,7 +271,7 @@ struct stats_page
             if (rock->missed)
             {
                 missed++;
-                write_line("Missed Rock: " + to_string(i));
+                // write_line("Missed Rock: " + to_string(i));
             }
             else if (rock->hit)
             {
@@ -424,23 +424,32 @@ struct game_state
     dynamic_array<rock_ *> *rock_queue;
     int rock_release;
     long next_rock_time;
+    long wind_change_time;
     int last_added_rock;
     timer wind_clock;
+    double max_health;
 
     double rock_softness;//To make the rock hurt less
     double acceleration;//To increase falling rate
 
-    game_state(int _dif)
+    game_state(double _dif)
     {
         // write_line("Difficulty: " + to_string(_dif));
         game_clock = create_timer("game_clock");
         wind_clock = create_timer("wind_clock");
 
-        rock_softness = 2 / (_dif+0.001);//To make the rock hurt less
-        acceleration = 0.025 * (_dif+0.001);
-        player = (new player_(30/(_dif+0.001)));
-        over = (_dif == 0);
+        if (_dif == 0)
+        { 
+            _dif = 0.0001;
+        }
+
+        rock_softness = 2 / (_dif);//To make the rock hurt less
+        acceleration = 0.025 * (_dif);
+        max_health = 30.0/(_dif);
+        player = (new player_(max_health));
+        over = ((int)_dif == 0);
         score = 0;
+        wind_change_time = WIND_CHANGE_TIME;
 
         rock_history = new dynamic_array<rock_ *>(0);
         rock_queue = new dynamic_array<rock_ *>(0);
@@ -541,7 +550,7 @@ struct game_state
             reset_timer(game_clock);
             next_rock_time = rnd(500, 1500)/(1 + (rock_release*acceleration));
         }
-        if (timer_ticks(wind_clock)>WIND_CHANGE_TIME)
+        if (timer_ticks(wind_clock)>wind_change_time)
         {
             reset_timer(wind_clock);
             if (rnd(-1,1)>=0)
@@ -553,6 +562,7 @@ struct game_state
                 wind = -rnd(1,MAX_WIND);
 
             }
+            wind_change_time = rnd(WIND_CHANGE_TIME/2, WIND_CHANGE_TIME);
         } 
         if (player->health <=0)
         {
@@ -574,10 +584,6 @@ struct game_state
         {
             over = true;
         }
-        // if (key_down(SPACE_KEY))//For debugging
-        // {
-        //     printf("%d : %d : %d : %d: %f\n", timer_ticks(game_clock) ,next_rock_time, rock_release , rock_queue.length ,rock_queue.rocks[rock_release-2].x_pos + bitmap_width(*rock_queue.rocks[rock_release-2].image)/2);
-        // }
         if (key_down(LEFT_KEY) && player->player_pos.x >= player->radius)
         {
             player->player_pos.x -= 0.5;
@@ -594,7 +600,15 @@ struct game_state
     }
     void draw_health()
     {
-        draw_text("Health Remaining : " + to_string((int) player->health), color_black(), FONT1, FONT_SIZE, 20 ,20 );
+        // draw_text("Health Remaining : " + to_string((int) player->health), color_black(), FONT1, FONT_SIZE, 20 ,20 );
+        double y_start = SCREEN_HEIGHT/10;
+        double x_start = 6 * SCREEN_WIDTH/10;
+        double width = SCREEN_WIDTH/4;
+        double height = 20;
+
+        double health_width = width * (player->health/max_health);
+        fill_rectangle(color_red(), x_start, y_start, width, height);
+        fill_rectangle(color_light_green(), x_start, y_start, health_width, height);
     }
 
     void draw_player()
@@ -645,11 +659,11 @@ struct game_state
 
 int main()  
 {   
-    open_window("Map Editor", SCREEN_WIDTH, SCREEN_HEIGHT);
+    open_window("ROCK DODGER", SCREEN_WIDTH, SCREEN_HEIGHT);
     while (true)
     {
         menu *game_menu = new menu();
-        game_state *game = new game_state(game_menu->draw_menu());
+        game_state *game = new game_state((double)game_menu->draw_menu());
         delete game_menu;
         write_line("Game started");
         game->render_game();
