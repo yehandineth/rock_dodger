@@ -172,15 +172,25 @@ const int SCREEN_HEIGHT = 720;
 const int SCREEN_WIDTH = 1080;
 
 const int BUFFER = 250;
-const int NUM_IMAGES = 5;
-
 const int FONT_SIZE = 30;       
 const font FONT1 = load_font("font1", "Roboto-italic.ttf");
 
-bitmap IMAGES[NUM_IMAGES];
+bitmap IMAGES[7];
 
 const long WIND_CHANGE_TIME = 4000; // Every 4 seconds the wind changes direction
 const int MAX_WIND = 5; // Maximum wind speed
+
+const double POTION_RATE = 0.2;
+const double COIN_RATE = 0.2;
+const double TIME_SLOW_RATE = 0.1;
+
+
+enum  _type {
+    ROCK,
+    POTION,
+    TIME_SLOW,
+    COIN,
+};
 
 //Add all the rock related functions to this struct
 struct rock_{
@@ -191,21 +201,41 @@ struct rock_{
     bool draw;
     bool missed;
     bool hit;
-
+    _type t;
     rock_()
     {  
-        int rock_i = rnd(NUM_IMAGES);
-        image = &IMAGES[rock_i];
+        int rock_i = rnd(5);
 
-        double x = rnd(-bitmap_width(*image)/2 + bitmap_width(*image)/15, SCREEN_WIDTH - bitmap_width(*image)/2 - bitmap_width(*image)/15)*1.0;
 
-        x_pos = x;
         y_pos = -bitmap_height("Rock_"+to_string(rock_i))*0.45;
         velocity[0] = 0;
         velocity[1] = rnd(20,100)/100.0;
         draw=true;
         missed=false;
         hit=false;
+        float x_ = rnd();
+        if (x_ < POTION_RATE)
+        {
+            t = POTION;
+            image = &IMAGES[5];
+        }
+        else if (x_ < POTION_RATE + TIME_SLOW_RATE)
+        {
+            t = TIME_SLOW;
+            image = &IMAGES[6];
+        }
+        else if (x_ < POTION_RATE + TIME_SLOW_RATE + COIN_RATE)
+        {
+            t = COIN;
+            image = &IMAGES[7];
+        }
+        else
+        {
+            t = ROCK;
+            image = &IMAGES[rock_i];
+        }
+        x_pos = rnd(-bitmap_width(*image)/2 + bitmap_width(*image)/15, SCREEN_WIDTH - bitmap_width(*image)/2 - bitmap_width(*image)/15)*1.0;
+
     }
     ~rock_()
     {
@@ -474,7 +504,7 @@ struct game_state
 
     void load_images()
     {
-        for (int i=0; i<NUM_IMAGES; i++)
+        for (int i=0; i<8; i++)
         {
             IMAGES[i] = load_bitmap("Rock_"+to_string(i), "./" + to_string(i) + ".png");
             // write_line("Loaded image: " + to_string(i) + ".png");
