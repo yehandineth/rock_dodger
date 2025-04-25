@@ -180,7 +180,7 @@ bitmap IMAGES[7];
 const long WIND_CHANGE_TIME = 4000; // Every 4 seconds the wind changes direction
 const int MAX_WIND = 5; // Maximum wind speed
 
-const double POTION_RATE = 0.07;
+const double POTION_RATE = 0.03;
 const double COIN_RATE = 0.2;
 const double TIME_SLOW_RATE = 0.1;
 const long MAX_TIME_SLOW = 8000; // Maximum time slow in milliseconds
@@ -577,13 +577,13 @@ struct game_state
                             break;
                         case POTION:
                             rock->draw = false;
-                            if (player->health + max_health/4.0 > max_health)
+                            if (player->health + max_health/8.0 > max_health)
                             {
                                 player->health = max_health;
                             }
                             else
                             {
-                                player->health += max_health/4.0;
+                                player->health += max_health/8.0;
                             }
                             break;
                         case TIME_SLOW:
@@ -695,7 +695,7 @@ struct game_state
         double height = 15;
 
         double health_width = width * ((powerup_time - timer_ticks(slow_clock))/(float)MAX_TIME_SLOW);
-        draw_text("Power Bar " , color_black(), FONT1, FONT_SIZE, x_start,y_start - 20 );
+        draw_text("Power Bar " , color_black(), FONT1, FONT_SIZE, x_start,y_start - 50 );
 
         fill_rectangle(color_white(), x_start, y_start, width, height);
         draw_rectangle(color_black(), x_start, y_start, width, height);
@@ -706,13 +706,15 @@ struct game_state
 
     void draw_health()
     {
-        draw_text("SCORE : " + to_string((int) score), color_black(), FONT1, FONT_SIZE, 20 ,20 );
-        double y_start = SCREEN_HEIGHT/10;
+        double y_start = SCREEN_HEIGHT/10 - 5;
         double x_start = 6 * SCREEN_WIDTH/10;
         double width = SCREEN_WIDTH/4;
         double height = 20;
 
         double health_width = width * (player->health/max_health);
+
+        draw_text("SCORE : " + to_string((int) score), color_black(), FONT1, FONT_SIZE, 50 ,y_start );
+
         fill_rectangle(color_red(), x_start, y_start, width, height);
         fill_rectangle(color_light_green(), x_start, y_start, health_width, height);
         if (powerup_time > 0)
