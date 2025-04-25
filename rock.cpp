@@ -180,9 +180,10 @@ bitmap IMAGES[7];
 const long WIND_CHANGE_TIME = 4000; // Every 4 seconds the wind changes direction
 const int MAX_WIND = 5; // Maximum wind speed
 
-const double POTION_RATE = 0.2;
+const double POTION_RATE = 0.07;
 const double COIN_RATE = 0.2;
 const double TIME_SLOW_RATE = 0.1;
+const long MAX_TIME_SLOW = 8000; // Maximum time slow in milliseconds
 
 
 enum  _type {
@@ -240,12 +241,20 @@ struct rock_{
     ~rock_()
     {
     }
-    void draw_rock()
+    void draw_rock(const bool &power_up)
     {
         draw_bitmap(*image, x_pos, y_pos, option_scale_bmp(0.1,0.1));
         // track_rock();//For debugging purposes
-        x_pos+=velocity[0];
-        y_pos+=velocity[1];
+        if (power_up)
+        {
+            x_pos+=velocity[0]/10;
+            y_pos+=velocity[1]/10;
+        }
+        else
+        {
+            x_pos+=velocity[0];
+            y_pos+=velocity[1];
+        }
     }
 
     //This function is for debugging purposes 
@@ -318,7 +327,7 @@ struct stats_page
         else
         {
             dodge_accuracy = ((missed/(hit+missed))*100);
-            write_line("Dodge Accuracy: " + to_string(dodge_accuracy) + "%");
+            // write_line("Dodge Accuracy: " + to_string(dodge_accuracy) + "%");
         }
     }
 
@@ -448,16 +457,18 @@ struct game_state
     int wind;
     player_ *player;
     bool over;
-    int score;
+    unsigned int score;
     timer game_clock;
     dynamic_array<rock_ *> *rock_history;
     dynamic_array<rock_ *> *rock_queue;
-    int rock_release;
-    long next_rock_time;
-    long wind_change_time;
-    int last_added_rock;
+    unsigned int rock_release;
+    unsigned int next_rock_time;
+    unsigned long wind_change_time;
+    unsigned int last_added_rock;
     timer wind_clock;
+    timer slow_clock;
     double max_health;
+    unsigned long powerup_time;
 
     double rock_softness;//To make the rock hurt less
     double acceleration;//To increase falling rate
@@ -467,6 +478,8 @@ struct game_state
         // write_line("Difficulty: " + to_string(_dif));
         game_clock = create_timer("game_clock");
         wind_clock = create_timer("wind_clock");
+        slow_clock = create_timer("slow_clock");
+        powerup_time = 0;
 
         if (_dif == 0)
         { 
@@ -541,9 +554,10 @@ struct game_state
             }
             else
             {
+                
                 // j++;//Track number of drawn rocks
                 // track_rock(*rock); //Bounding boxes of rocks
-                rock->draw_rock();
+                rock->draw_rock(powerup_time>0);
                 rock->velocity[0] = wind*0.1;
                 if (circles_intersect(
                     (rock->x_pos + (double) bitmap_width(*rock->image)/2),
@@ -554,17 +568,54 @@ struct game_state
                     player->radius)
                 )
                 {
-                    player->health-=rock->velocity[1]/rock_softness;
-                    rock->hit = true;
-                    remove_rock(*rock);
+                    switch (rock->t)
+                    {
+                        case ROCK:
+                            player->health-=rock->velocity[1]/rock_softness;
+                            rock->hit = true;
+                            remove_rock(*rock);
+                            break;
+                        case POTION:
+                            rock->draw = false;
+                            if (player->health + max_health/4.0 > max_health)
+                            {
+                                player->health = max_health;
+                            }
+                            else
+                            {
+                                player->health += max_health/4.0;
+                            }
+                            break;
+                        case TIME_SLOW:
+                            rock->draw = false;
+                            resume_timer(slow_clock);
+                            if (powerup_time - timer_ticks(slow_clock) + 2000 > MAX_TIME_SLOW)
+                            {
+                                powerup_time = MAX_TIME_SLOW + timer_ticks(slow_clock);
+                            }
+                            else
+                            {
+                                powerup_time += 2000;
+                            }
+                            break;
+                        case COIN:
+                            rock->draw = false;
+                            score++;
+                            break;
+                    }
+                    
                 }
                 
                 else if (((*rock).y_pos + bitmap_height(*(*rock).image)/2)>=SCREEN_HEIGHT && !(*rock).missed)
                 {
                     // printf("WORKS\n");
-                    rock->missed = true;
-                    // printf("WORKS\n");
-                    remove_rock(*rock);
+                    if (rock->t == ROCK)
+                    {
+                        rock->missed = true;
+                        // printf("WORKS\n");
+                        remove_rock(*rock);
+                    }
+                    
                     // write_line("Missed Rock: " + to_string(i));
                 }
             } 
@@ -584,8 +635,9 @@ struct game_state
         {
             reset_timer(wind_clock);
             if (rnd(-1,1)>=0)
-            {   
+            {       
                 wind = rnd(1,MAX_WIND);
+
             }
             else
             {
@@ -594,6 +646,12 @@ struct game_state
             }
             wind_change_time = rnd(WIND_CHANGE_TIME/2, WIND_CHANGE_TIME);
         } 
+        if (powerup_time <= timer_ticks(slow_clock))
+        {
+            reset_timer(slow_clock);
+            powerup_time = timer_ticks(slow_clock);
+            pause_timer(slow_clock);
+        }
         if (player->health <=0)
         {
             //STATS PAGE MENU
@@ -627,10 +685,28 @@ struct game_state
             debug_statements();
         }
     
+    }  
+
+    void draw_slow()
+    {
+        double y_start = SCREEN_HEIGHT/10;
+        double x_start = 3 * SCREEN_WIDTH/10;
+        double width = SCREEN_WIDTH/4;
+        double height = 15;
+
+        double health_width = width * ((powerup_time - timer_ticks(slow_clock))/(float)MAX_TIME_SLOW);
+        draw_text("Power Bar " , color_black(), FONT1, FONT_SIZE, x_start,y_start - 20 );
+
+        fill_rectangle(color_white(), x_start, y_start, width, height);
+        draw_rectangle(color_black(), x_start, y_start, width, height);
+        fill_rectangle(color_light_blue(), x_start, y_start, health_width, height);
+
+        
     }
+
     void draw_health()
     {
-        // draw_text("Health Remaining : " + to_string((int) player->health), color_black(), FONT1, FONT_SIZE, 20 ,20 );
+        draw_text("SCORE : " + to_string((int) score), color_black(), FONT1, FONT_SIZE, 20 ,20 );
         double y_start = SCREEN_HEIGHT/10;
         double x_start = 6 * SCREEN_WIDTH/10;
         double width = SCREEN_WIDTH/4;
@@ -639,6 +715,13 @@ struct game_state
         double health_width = width * (player->health/max_health);
         fill_rectangle(color_red(), x_start, y_start, width, height);
         fill_rectangle(color_light_green(), x_start, y_start, health_width, height);
+        if (powerup_time > 0)
+        {
+            // write_line("Powerup Time: " + to_string((int) powerup_time));
+            // write_line(to_string(timer_ticks(slow_clock)));
+
+            draw_slow();
+        }
     }
 
     void draw_player()
@@ -650,6 +733,7 @@ struct game_state
     {
         start_timer(game_clock);
         start_timer(wind_clock);
+        start_timer(slow_clock);
         while (!quit_requested())
         {   
             // printf("Game started1\n");
@@ -695,16 +779,16 @@ int main()
         menu *game_menu = new menu();
         game_state *game = new game_state((double)game_menu->draw_menu());
         delete game_menu;
-        write_line("Game started");
+        // write_line("Game started");
         game->render_game();
-        write_line("Game ended");
+        // write_line("Game ended");
       
         // game->rock_history->print();
         stats_page stats = stats_page(game->score, game->rock_history);        
         int user_opt = stats.draw_stats();
 
         delete game;
-        write_line("Game deleted");
+        // write_line("Game deleted");
         if (user_opt == 0)
         {
            break;
