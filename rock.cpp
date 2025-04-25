@@ -1,13 +1,40 @@
+// File: rock.cpp
+// Description: Implements the “Rock Dodger” game using SplashKit.
+//   - Loads assets (bitmaps, fonts)
+//   - Manages dynamic arrays of falling rocks and power‑ups
+//   - Handles game state, input, rendering, collisions, and scoring
+
 #include "splashkit.h"
-#include <format>
 #include <cstdlib>
 #include <stdio.h>
 #include <new> 
 
 using std::to_string;
 
-//This part (The dynamic array) is a exactly the same code as in the Deep Dive Memory Task, 
-//But I might make slight adjustments to it throughout the project to suit my needs.
+const int SCREEN_HEIGHT = 720;
+const int SCREEN_WIDTH = 1080;
+
+const int BUFFER = 250;
+const int FONT_SIZE = 30;       
+const font FONT1 = load_font("font1", "Roboto-italic.ttf");
+
+bitmap IMAGES[7];
+
+const long WIND_CHANGE_TIME = 4000; // Every 4 seconds the wind changes direction
+const int MAX_WIND = 5; // Maximum wind speed
+
+//Probabilities of power up drops, the rest will be rocks
+const double POTION_RATE = 0.03; 
+const double COIN_RATE = 0.2;
+const double TIME_SLOW_RATE = 0.1;
+
+const long MAX_TIME_SLOW = 8000; // Maximum time slow in milliseconds
+
+// Template dynamic_array<T>
+// A simple resizable array with manual memory management.
+// - capacity: total allocated slots
+// - size: current number of elements
+// - data: raw pointer to T elements
 template <typename T>
 struct dynamic_array
 {
@@ -15,6 +42,7 @@ struct dynamic_array
     int size;
     T *data;
 
+    // Constructor: allocate raw memory and default-construct all slots
     dynamic_array(int capacity)
     {
         size = 0;
@@ -33,9 +61,11 @@ struct dynamic_array
             this->capacity = capacity;
         }
     }
+
+    // Destructor: call destructors on all elements and free memory
     ~dynamic_array()
     {
-        // Clear to ensure we remove any data from memory before freeing it
+// Clear to ensure we remove any data from memory before freeing it
         for (int i = 0; i < capacity; i++)
         {
             data[i].~T();
@@ -43,41 +73,36 @@ struct dynamic_array
         size = 0;
         capacity = 0;
 
-        // Free the data in the array
+// Free the data in the array
         delete[] data;
-        // Free the array itself
+// Free the array itself
         
     }
+
+    // resize: adjust capacity up or down, preserving elements where possible
     bool resize(int new_capacity)
     {
-
-        // Call destructors if we are reducing size
         for(int i = capacity - 1; i >= (int)new_capacity; i--)
         {
             data[i].~T();
         }
 
-        // Allocate a new array with the new capacity and store it in a local variable to check it is not null
-        
         T *new_data = (T *)realloc(data, new_capacity * sizeof(T));
-
 
         if (new_data == nullptr)
         {
             printf("Memory allocation failed\n");
             return false; // Memory allocation failed
         }
-        // Call constructors if we increased size
+
         for(int i = capacity; i < new_capacity; i++)
         {
             new(&new_data[i]) T();
         }
 
-        // Update the array's data and capacity
         data = new_data;
         capacity = new_capacity;
 
-        // Update the size if the new capacity is smaller than the current size
         if (new_capacity < size)
         {
             size = new_capacity;
@@ -86,12 +111,11 @@ struct dynamic_array
         return true; // Resizing succeeded
     }
 
+    // add: append new element, grow if needed
     bool add(T value)
     {
-        // Check if we need to resize the array
         if (size >= capacity)
         {
-            // Double the capacity of the array
             if (!resize(capacity * 2 + 1))
             {
                 printf("Memory allocation failed\n");
@@ -99,18 +123,17 @@ struct dynamic_array
             }
         }
 
-        // Add the new value to the end of the array and increment the size
         data[size] = value;
         size++;
 
         return true; // Adding succeeded
     }
+
+    // operator[]: bounds-checked element access (const and mutable)
     const T &operator[](unsigned int index) const
     {
-        // Check if the index is out of bounds
         if (index >= size)
         {
-            // The index is out of bounds, so return the default value
             return data[0];
         }
 
@@ -118,40 +141,39 @@ struct dynamic_array
     }
     T &operator[](unsigned int index) 
     {
-        // Check if the index is out of bounds
         if (index >= size)
         {
-            // The index is out of bounds, so return the default value
             return data[0];
         }
 
         return data[index];
     }
 
+    // get: safe retrieval returning default on OOB
     T get(unsigned int index)
     {
-        // Check if the index is out of bounds
         if (index < 0 || index >= size)
         {
             return 0; // Return the default value
         }
         return data[index]; // Return the value at the index
     }
+
+    // set: safe assignment with bounds check
     bool set(unsigned int index, T value)
     {
-        // Check if the index is out of bounds
         if (index >= size)
         {
-            // The index is out of bounds, so do nothing
             return false;
         }
 
         data[index] = value;
         return true;
     }
+
+    // print: debug helper to log contents, size, and capacity
     void print()
     {
-        //Print the capacity and size of the array
         printf("Dynamic array capacity: %d\n", capacity);
         printf("Dynamic array size: %d\n", size);
         printf("Dynamic array: [");
@@ -166,26 +188,13 @@ struct dynamic_array
         printf("]\n");
     }
 };
-//End of dynamic array code
 
-const int SCREEN_HEIGHT = 720;
-const int SCREEN_WIDTH = 1080;
-
-const int BUFFER = 250;
-const int FONT_SIZE = 30;       
-const font FONT1 = load_font("font1", "Roboto-italic.ttf");
-
-bitmap IMAGES[7];
-
-const long WIND_CHANGE_TIME = 4000; // Every 4 seconds the wind changes direction
-const int MAX_WIND = 5; // Maximum wind speed
-
-const double POTION_RATE = 0.03;
-const double COIN_RATE = 0.2;
-const double TIME_SLOW_RATE = 0.1;
-const long MAX_TIME_SLOW = 8000; // Maximum time slow in milliseconds
-
-
+// Enum _type
+// Defines the categories of falling objects in the game
+//   ROCK      – standard damaging object
+//   POTION    – health restore
+//   TIME_SLOW – slows drop speed temporarily
+//   COIN      – bonus score
 enum  _type {
     ROCK,
     POTION,
@@ -193,7 +202,9 @@ enum  _type {
     COIN,
 };
 
-//Add all the rock related functions to this struct
+// Struct rock_
+// Represents a single falling object (rock or power‑up)
+// Holds position, velocity, bitmap pointer, type flags, and status (draw/hit/missed)
 struct rock_{
     double x_pos;
     double y_pos;
@@ -203,10 +214,13 @@ struct rock_{
     bool missed;
     bool hit;
     _type t;
+
+    // Constructor:
+    //  - Randomly choose image index and type based on POTION_RATE, TIME_SLOW_RATE, COIN_RATE
+    //  - Initialize above-screen y position and random downward velocity
     rock_()
     {  
         int rock_i = rnd(5);
-
 
         y_pos = -bitmap_height("Rock_"+to_string(rock_i))*0.45;
         velocity[0] = 0;
@@ -236,15 +250,14 @@ struct rock_{
             image = &IMAGES[rock_i];
         }
         x_pos = rnd(-bitmap_width(*image)/2 + bitmap_width(*image)/15, SCREEN_WIDTH - bitmap_width(*image)/2 - bitmap_width(*image)/15)*1.0;
+    }
 
-    }
-    ~rock_()
-    {
-    }
+    // draw_rock:
+    //  - Render the bitmap at (x_pos,y_pos) scaled by 0.1
+    //  - Move according to velocity, slowed if power‑up active
     void draw_rock(const bool &power_up)
     {
         draw_bitmap(*image, x_pos, y_pos, option_scale_bmp(0.1,0.1));
-        // track_rock();//For debugging purposes
         if (power_up)
         {
             x_pos+=velocity[0]/10;
@@ -257,7 +270,8 @@ struct rock_{
         }
     }
 
-    //This function is for debugging purposes 
+    // track_rock (debug):
+    //  - Draw a collision circle around the rock’s center
     void track_rock()
     {
         double x = x_pos + bitmap_width(*image)/2;
@@ -267,12 +281,15 @@ struct rock_{
     }
 };
 
+// Struct player_
+// Holds player health, position (centered at bottom), and collision radius
 struct player_
 {
     double health;
     point_2d player_pos;
     double radius;
 
+    // Constructor: set initial health, center bottom screen, fixed radius
     player_(int _health)
     {
         health = _health;
@@ -280,26 +297,23 @@ struct player_
         player_pos.y = SCREEN_HEIGHT - 50;
         radius = 50;
     }
-    ~player_()
-    {
-    }
-    
 };
 
+// Struct stats_page
+// Calculates post‑game stats (hits vs misses) and renders the Game Over menu
 struct stats_page
 {
     int score;
     int dodge_accuracy;
     dynamic_array<rock_ *> *rock_history;
+
     stats_page(int _score, dynamic_array<rock_ *> *_rock_history)
     {
         score = _score;
         rock_history = _rock_history;
     }
-    ~stats_page()
-    {
-    }
 
+    // calc_stats: tally missed/hit from rock_history and compute dodge_accuracy
     void calc_stats()
     {
         double missed = 0;
@@ -310,15 +324,12 @@ struct stats_page
             if (rock->missed)
             {
                 missed++;
-                // write_line("Missed Rock: " + to_string(i));
             }
             else if (rock->hit)
             {
                 hit++;
             }
-            // write_line("Rock " + to_string(i) + " : " + to_string(rock->missed) + " : " + to_string(rock->hit));
         }
-        // write_line(" Missed: " + to_string(missed) + " Hit: " + to_string(hit));
 
         if (hit+missed==0)
         {
@@ -327,18 +338,16 @@ struct stats_page
         else
         {
             dodge_accuracy = ((missed/(hit+missed))*100);
-            // write_line("Dodge Accuracy: " + to_string(dodge_accuracy) + "%");
         }
     }
 
+    // mouse_on_button: hover detection for stats menu buttons
     bool mouse_on_button(double x)
     {
         return (mouse_x() > x && mouse_x() < x+SCREEN_WIDTH/5 && mouse_y() > SCREEN_HEIGHT*5/6 && mouse_y()< SCREEN_HEIGHT*5/6 + 100);
     }
 
-    /*
-    Draw the buttons in the menu
-    */
+    // draw_button: render a rectangular button with hover effect
     void draw_button(double x)
     {
         color btn_color;
@@ -352,6 +361,8 @@ struct stats_page
         }
         fill_rectangle(btn_color, x, SCREEN_HEIGHT*5/6, SCREEN_WIDTH/5,100);
     }
+
+    // draw_stats: main loop to display stats and capture user choice (EXIT vs MENU)
     int draw_stats()
     {
         calc_stats();
@@ -363,9 +374,6 @@ struct stats_page
             draw_text("Game Over", color_black(), FONT1, FONT_SIZE*5, SCREEN_WIDTH/2 -FONT_SIZE*10 ,SCREEN_HEIGHT/3 - 120 );
             draw_text("Score: " + to_string(score), color_black(), FONT1, FONT_SIZE, SCREEN_WIDTH/2 -FONT_SIZE*10 ,SCREEN_HEIGHT/3  + FONT_SIZE*2 );
             draw_text("Dodge Accuracy: " + to_string((int)dodge_accuracy) + "%", color_black(), FONT1, FONT_SIZE, SCREEN_WIDTH/2 -FONT_SIZE*10 ,SCREEN_HEIGHT/2);
-            
-
-            
 
             for (int i =0; i < 2; i++)
             {
@@ -385,6 +393,8 @@ struct stats_page
     }
 };
 
+// Struct menu
+// Renders the initial difficulty selection screen with EASY, MEDIUM, HARD, EXIT options
 struct menu
 {    
     menu()
@@ -394,17 +404,14 @@ struct menu
     ~menu()
     {
     }
-    /*
-    Returns whether the mouse is on the button or not
-    */
+
+    // mouse_on_button: checks if cursor is over a menu button at vertical pos y
     bool mouse_on_button(double y)
     {
         return (mouse_x() > (SCREEN_WIDTH/3) && mouse_x() < 2 * (SCREEN_WIDTH/3) && mouse_y() > y && mouse_y() < y+100);
     }
 
-    /*
-    Draw the buttons in the menu
-    */
+    // draw_button: render menu button with hover feedback
     void draw_button(double y)
     {
         color btn_color;
@@ -419,10 +426,7 @@ struct menu
         fill_rectangle(btn_color, SCREEN_WIDTH/3, y, SCREEN_WIDTH/3,100);
     }
 
-
-    /*
-    The menu before start playing
-    */
+    // draw_menu: display menu, handle clicks, return selected difficulty index
     int draw_menu()
     {
         while(!quit_requested())
@@ -441,7 +445,7 @@ struct menu
                     return i/120;
                 }
             }
-            draw_text("EXIT",color_white(),FONT1, FONT_SIZE,SCREEN_WIDTH/2 -FONT_SIZE*2, SCREEN_HEIGHT/3 + 20);
+            draw_text("EXIT MENU",color_white(),FONT1, FONT_SIZE,SCREEN_WIDTH/2 -FONT_SIZE*3, SCREEN_HEIGHT/3 + 20);
             draw_text("EASY", color_white(),FONT1, FONT_SIZE, SCREEN_WIDTH/2  -FONT_SIZE*2, SCREEN_HEIGHT/3 + 140);
             draw_text("MEDIUM", color_white(),FONT1, FONT_SIZE, SCREEN_WIDTH/2  -FONT_SIZE*2, SCREEN_HEIGHT/3 + 260);
             draw_text("HARD", color_white(),FONT1, FONT_SIZE, SCREEN_WIDTH/2 -FONT_SIZE*2, SCREEN_HEIGHT/3 + 380);
@@ -449,48 +453,61 @@ struct menu
         }
         return 0;
     }
-    
 };
 
+// Struct game_state
+// Manages entire gameplay session:
+//  - Player object, rock queue/history, timers, wind, power‑ups, scoring, difficulty
 struct game_state
 {
-    int wind;
     player_ *player;
     bool over;
+    
     unsigned int score;
-    timer game_clock;
+    
     dynamic_array<rock_ *> *rock_history;
     dynamic_array<rock_ *> *rock_queue;
+    
     unsigned int rock_release;
     unsigned int next_rock_time;
     unsigned long wind_change_time;
-    unsigned int last_added_rock;
+
+    timer game_clock;
     timer wind_clock;
     timer slow_clock;
+    
     double max_health;
+    
+    double difficulty;
     unsigned long powerup_time;
-
+    int wind;
+    
     double rock_softness;//To make the rock hurt less
     double acceleration;//To increase falling rate
 
+    // Constructor(difficulty):
+    //  - Set up timers, difficulty scaling (health, acceleration), load images
     game_state(double _dif)
     {
-        // write_line("Difficulty: " + to_string(_dif));
         game_clock = create_timer("game_clock");
         wind_clock = create_timer("wind_clock");
         slow_clock = create_timer("slow_clock");
         powerup_time = 0;
+        difficulty = _dif;
 
         if (_dif == 0)
         { 
             _dif = 0.0001;
         }
 
-        rock_softness = 2 / (_dif);//To make the rock hurt less
+        rock_softness = 2 / (_dif+1);
         acceleration = 0.025 * (_dif);
         max_health = 30.0/(_dif);
-        player = (new player_(max_health));
+        
         over = ((int)_dif == 0);
+
+        player = (new player_(max_health));
+        
         score = 0;
         wind_change_time = WIND_CHANGE_TIME;
 
@@ -501,8 +518,9 @@ struct game_state
         next_rock_time = 1000;
 
         load_images();
-        // write_line("Loaded images");
     }
+
+    // Destructor: clean up dynamic memory (player, rock arrays)
     ~game_state()
     {
         for (int i = 0; i < rock_queue->size;    i++) 
@@ -515,33 +533,33 @@ struct game_state
         delete rock_queue;
     }
 
+    // load_images: preload all rock and power‑up bitmaps into IMAGES array
     void load_images()
     {
         for (int i=0; i<8; i++)
         {
             IMAGES[i] = load_bitmap("Rock_"+to_string(i), "./" + to_string(i) + ".png");
-            // write_line("Loaded image: " + to_string(i) + ".png");
         }
     }
 
+    // populate_rock_queue: lazily generate rocks ahead of time (BUFFER + 2×released count)
     void populate_rock_queue()
     {
         for (int i = rock_queue->size; i < rock_release*2 + BUFFER; i++)
         {
-            // write_line(to_string(j));
             rock_ * new_rock = new rock_();
             rock_queue->add(new_rock);
         }
     }
 
+    // remove_rock: flag rock as removed, record pointer in history
     void remove_rock(rock_ &rock)
     {
-        // write_line("Rock removed: " + to_string(rock.x_pos + bitmap_width(*rock.image)/2));
-        // write_line(rock_history->size);
         rock_history->add(&rock);
         rock.draw = false;
     }
 
+    // draw_rocks: render, update, and handle collisions/misses for active rocks
     void draw_rocks()
     {
         int j;
@@ -554,9 +572,6 @@ struct game_state
             }
             else
             {
-                
-                // j++;//Track number of drawn rocks
-                // track_rock(*rock); //Bounding boxes of rocks
                 rock->draw_rock(powerup_time>0);
                 rock->velocity[0] = wind*0.1;
                 if (circles_intersect(
@@ -600,7 +615,7 @@ struct game_state
                             break;
                         case COIN:
                             rock->draw = false;
-                            score++;
+                            score+= difficulty;
                             break;
                     }
                     
@@ -608,21 +623,17 @@ struct game_state
                 
                 else if (((*rock).y_pos + bitmap_height(*(*rock).image)/2)>=SCREEN_HEIGHT && !(*rock).missed)
                 {
-                    // printf("WORKS\n");
                     if (rock->t == ROCK)
                     {
                         rock->missed = true;
-                        // printf("WORKS\n");
                         remove_rock(*rock);
                     }
-                    
-                    // write_line("Missed Rock: " + to_string(i));
                 }
             } 
-            // printf("%d\n", j);
         }
     }
 
+    // handle_mechanics: spawn timing, wind updates, power‑up expiration, death check
     void handle_mechanics()
     {
         if (timer_ticks(game_clock)>next_rock_time && rock_release < rock_queue->size)
@@ -654,7 +665,6 @@ struct game_state
         }
         if (player->health <=0)
         {
-            //STATS PAGE MENU
             over = true;
         }
     }
@@ -684,9 +694,9 @@ struct game_state
         {
             debug_statements();
         }
-    
     }  
 
+    // draw_slow: render time‑slow power‑up bar at top
     void draw_slow()
     {
         double y_start = SCREEN_HEIGHT/10;
@@ -700,10 +710,9 @@ struct game_state
         fill_rectangle(color_white(), x_start, y_start, width, height);
         draw_rectangle(color_black(), x_start, y_start, width, height);
         fill_rectangle(color_light_blue(), x_start, y_start, health_width, height);
-
-        
     }
 
+    // draw_health: show player health bar and current score
     void draw_health()
     {
         double y_start = SCREEN_HEIGHT/10 - 5;
@@ -719,18 +728,17 @@ struct game_state
         fill_rectangle(color_light_green(), x_start, y_start, health_width, height);
         if (powerup_time > 0)
         {
-            // write_line("Powerup Time: " + to_string((int) powerup_time));
-            // write_line(to_string(timer_ticks(slow_clock)));
-
             draw_slow();
         }
     }
 
+    // draw_player: render the player as a filled circle above health bar
     void draw_player()
     {
         fill_circle(color_black(), player->player_pos.x,player->player_pos.y - player->radius - 10,player->radius);
     }
 
+    // render_game: main game loop (update, draw, timers) until over or quit
     void render_game()
     {
         start_timer(game_clock);
@@ -738,63 +746,54 @@ struct game_state
         start_timer(slow_clock);
         while (!quit_requested())
         {   
-            // printf("Game started1\n");
             if (over)
             {
-                return;
+                break;
             }
             process_events();
 
             populate_rock_queue();
-            // printf("Game started2\n");
 
             handle_user_inputs();
-            // printf("Game started3\n");
 
             handle_mechanics();
-            // printf("Game started4\n");
 
             clear_screen(color_white());
-            // printf("Game started5\n");
 
             draw_rocks();
-            // printf("Game started6\n");
 
             draw_player();
-            // printf("Game started7\n");
 
             draw_health();
-            // printf("Game started8\n");
 
             refresh_screen();
-            // printf("Game started9\n");
-
         }
     }
 };
 
+// main: application entry point
+//  - Loop: show menu → run game → show stats → exit or restart
 int main()  
 {   
     open_window("ROCK DODGER", SCREEN_WIDTH, SCREEN_HEIGHT);
     while (true)
     {
         menu *game_menu = new menu();
+
         game_state *game = new game_state((double)game_menu->draw_menu());
         delete game_menu;
-        // write_line("Game started");
+
         game->render_game();
-        // write_line("Game ended");
       
-        // game->rock_history->print();
         stats_page stats = stats_page(game->score, game->rock_history);        
         int user_opt = stats.draw_stats();
 
         delete game;
-        // write_line("Game deleted");
         if (user_opt == 0)
         {
            break;
         }
     } 
     return 0;
+    write_line("Thanks for playing!");
 }
